@@ -6,7 +6,7 @@ public class SelectorOption {
     private final char mnemonic;
     private final String toolTip;
 
-    private SelectorOption(final Builder builder) {
+    private SelectorOption(Builder builder) {
         option = builder.option;
         caption = builder.caption;
         mnemonic = builder.mnemonic;
@@ -39,24 +39,25 @@ public class SelectorOption {
         private char mnemonic;
         private String toolTip;
 
-        private Builder() { }
+        private Builder() {
+        }
 
-        public Builder withOption(final InnerBuilderOption option) {
+        public Builder withOption(InnerBuilderOption option) {
             this.option = option;
             return this;
         }
 
-        public Builder withCaption(final String caption) {
+        public Builder withCaption(String caption) {
             this.caption = caption;
             return this;
         }
 
-        public Builder withMnemonic(final char mnemonic) {
+        public Builder withMnemonic(char mnemonic) {
             this.mnemonic = mnemonic;
             return this;
         }
 
-        public Builder withToolTip(final String toolTip) {
+        public Builder withToolTip(String toolTip) {
             this.toolTip = toolTip;
             return this;
         }

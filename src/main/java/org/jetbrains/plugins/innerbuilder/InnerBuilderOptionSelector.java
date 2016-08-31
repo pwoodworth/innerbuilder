@@ -18,7 +18,7 @@ public final class InnerBuilderOptionSelector {
     private static final List<SelectorOption> OPTIONS = createGeneratorOptions();
 
     private static List<SelectorOption> createGeneratorOptions() {
-        final List<SelectorOption> options = new ArrayList<SelectorOption>(8);
+        List<SelectorOption> options = new ArrayList<>(8);
 
         options.add(
                 SelectorOption.newBuilder()
@@ -73,15 +73,15 @@ public final class InnerBuilderOptionSelector {
                         .withOption(InnerBuilderOption.WITH_JAVADOC)
                         .build());
 
-	options.add(
-		SelectorOption.newBuilder()
-			.withCaption("Use field names in setter")
-			.withMnemonic('s')
-			.withToolTip(
-				"Generate builder methods that has the same parameter names in setter methods as field names, for example: "
-				+ "builder.withName(String fieldName)")
-			.withOption(InnerBuilderOption.FIELD_NAMES)
-			.build());
+        options.add(
+                SelectorOption.newBuilder()
+                        .withCaption("Use field names in setter")
+                        .withMnemonic('s')
+                        .withToolTip(
+                                "Generate builder methods that has the same parameter names in setter methods as field names, for example: "
+                                        + "builder.withName(String fieldName)")
+                        .withOption(InnerBuilderOption.FIELD_NAMES)
+                        .build());
 
         return options;
     }
@@ -90,8 +90,8 @@ public final class InnerBuilderOptionSelector {
     }
 
     @Nullable
-    public static List<PsiFieldMember> selectFieldsAndOptions(final List<PsiFieldMember> members,
-                                                              final Project project) {
+    public static List<PsiFieldMember> selectFieldsAndOptions(List<PsiFieldMember> members,
+                                                              Project project) {
         if (members == null || members.isEmpty()) {
             return null;
         }
@@ -100,11 +100,11 @@ public final class InnerBuilderOptionSelector {
             return members;
         }
 
-        final JCheckBox[] optionCheckBoxes = buildOptionCheckBoxes();
+        JCheckBox[] optionCheckBoxes = buildOptionCheckBoxes();
 
-        final PsiFieldMember[] memberArray = members.toArray(new PsiFieldMember[members.size()]);
+        PsiFieldMember[] memberArray = members.toArray(new PsiFieldMember[members.size()]);
 
-        final MemberChooser<PsiFieldMember> chooser = new MemberChooser<PsiFieldMember>(memberArray,
+        MemberChooser<PsiFieldMember> chooser = new MemberChooser<>(memberArray,
                 false, // allowEmptySelection
                 true,  // allowMultiSelection
                 project, null, optionCheckBoxes);
@@ -119,9 +119,9 @@ public final class InnerBuilderOptionSelector {
     }
 
     private static JCheckBox[] buildOptionCheckBoxes() {
-        final PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
-        final int optionCount = OPTIONS.size();
-        final JCheckBox[] checkBoxesArray = new JCheckBox[optionCount];
+        PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+        int optionCount = OPTIONS.size();
+        JCheckBox[] checkBoxesArray = new JCheckBox[optionCount];
         for (int i = 0; i < optionCount; i++) {
             checkBoxesArray[i] = buildOptionCheckBox(propertiesComponent, OPTIONS.get(i));
         }
@@ -129,19 +129,19 @@ public final class InnerBuilderOptionSelector {
         return checkBoxesArray;
     }
 
-    private static JCheckBox buildOptionCheckBox(final PropertiesComponent propertiesComponent,
-                                                 final SelectorOption selectorOption) {
-        final InnerBuilderOption option = selectorOption.getOption();
+    private static JCheckBox buildOptionCheckBox(PropertiesComponent propertiesComponent,
+                                                 SelectorOption selectorOption) {
+        InnerBuilderOption option = selectorOption.getOption();
 
-        final JCheckBox optionCheckBox = new NonFocusableCheckBox(selectorOption.getCaption());
+        JCheckBox optionCheckBox = new NonFocusableCheckBox(selectorOption.getCaption());
         optionCheckBox.setMnemonic(selectorOption.getMnemonic());
         optionCheckBox.setToolTipText(selectorOption.getToolTip());
 
-        final String optionProperty = option.getProperty();
+        String optionProperty = option.getProperty();
         optionCheckBox.setSelected(propertiesComponent.isTrueValue(optionProperty));
         optionCheckBox.addItemListener(new ItemListener() {
             @Override
-            public void itemStateChanged(final ItemEvent event) {
+            public void itemStateChanged(ItemEvent event) {
                 propertiesComponent.setValue(optionProperty, Boolean.toString(optionCheckBox.isSelected()));
             }
         });

@@ -38,14 +38,7 @@ public class InnerBuilderGenerator implements Runnable {
     private final List<PsiFieldMember> selectedFields;
     private final PsiElementFactory psiElementFactory;
 
-    public static void generate(final Project project, final Editor editor, final PsiFile file,
-                                final List<PsiFieldMember> selectedFields) {
-        final Runnable builderGenerator = new InnerBuilderGenerator(project, file, editor, selectedFields);
-        ApplicationManager.getApplication().runWriteAction(builderGenerator);
-    }
-
-    private InnerBuilderGenerator(final Project project, final PsiFile file, final Editor editor,
-                                  final List<PsiFieldMember> selectedFields) {
+    private InnerBuilderGenerator(Project project, PsiFile file, Editor editor, List<PsiFieldMember> selectedFields) {
         this.project = project;
         this.file = file;
         this.editor = editor;
@@ -53,23 +46,41 @@ public class InnerBuilderGenerator implements Runnable {
         psiElementFactory = JavaPsiFacade.getInstance(project).getElementFactory();
     }
 
+    public static void generate(Project project, Editor editor, PsiFile file,
+                                List<PsiFieldMember> selectedFields) {
+        Runnable builderGenerator = new InnerBuilderGenerator(project, file, editor, selectedFields);
+        ApplicationManager.getApplication().runWriteAction(builderGenerator);
+    }
+
+    private static EnumSet<InnerBuilderOption> currentOptions() {
+        EnumSet<InnerBuilderOption> options = EnumSet.noneOf(InnerBuilderOption.class);
+        PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+        for (InnerBuilderOption option : InnerBuilderOption.values()) {
+            boolean currentSetting = propertiesComponent.getBoolean(option.getProperty(), false);
+            if (currentSetting) {
+                options.add(option);
+            }
+        }
+        return options;
+    }
+
     @Override
     public void run() {
-        final PsiClass topLevelClass = InnerBuilderUtils.getTopLevelClass(project, file, editor);
+        PsiClass topLevelClass = InnerBuilderUtils.getTopLevelClass(project, file, editor);
         if (topLevelClass == null) {
             return;
         }
-        final Set<InnerBuilderOption> options = currentOptions();
-        final PsiClass builderClass = findOrCreateBuilderClass(topLevelClass);
-        final PsiType builderType = psiElementFactory.createTypeFromText(BUILDER_CLASS_NAME, null);
-        final PsiMethod constructor = generateConstructor(topLevelClass, builderType);
+        Set<InnerBuilderOption> options = currentOptions();
+        PsiClass builderClass = findOrCreateBuilderClass(topLevelClass);
+        PsiType builderType = psiElementFactory.createTypeFromText(BUILDER_CLASS_NAME, null);
+        PsiMethod constructor = generateConstructor(topLevelClass, builderType);
 
         addMethod(topLevelClass, null, constructor, true);
-        final Collection<PsiFieldMember> finalFields = new ArrayList<PsiFieldMember>();
-        final Collection<PsiFieldMember> nonFinalFields = new ArrayList<PsiFieldMember>();
+        Collection<PsiFieldMember> finalFields = new ArrayList<>();
+        Collection<PsiFieldMember> nonFinalFields = new ArrayList<>();
 
         PsiElement lastAddedField = null;
-        for (final PsiFieldMember fieldMember : selectedFields) {
+        for (PsiFieldMember fieldMember : selectedFields) {
             lastAddedField = findOrCreateField(builderClass, fieldMember, lastAddedField);
             if (fieldMember.getElement().hasModifierProperty(PsiModifier.FINAL)
                     && !options.contains(InnerBuilderOption.FINAL_SETTERS)) {
@@ -80,22 +91,22 @@ public class InnerBuilderGenerator implements Runnable {
             }
         }
         if (options.contains(InnerBuilderOption.NEW_BUILDER_METHOD)) {
-            final PsiMethod newBuilderMethod = generateNewBuilderMethod(builderType, finalFields, options);
+            PsiMethod newBuilderMethod = generateNewBuilderMethod(builderType, finalFields, options);
             addMethod(topLevelClass, null, newBuilderMethod, false);
         }
 
         // builder constructor, accepting the final fields
-        final PsiMethod builderConstructorMethod = generateBuilderConstructor(builderClass, finalFields, options);
+        PsiMethod builderConstructorMethod = generateBuilderConstructor(builderClass, finalFields, options);
         addMethod(builderClass, null, builderConstructorMethod, false);
 
         // builder copy constructor or static copy method
         if (options.contains(InnerBuilderOption.COPY_CONSTRUCTOR)) {
             if (options.contains(InnerBuilderOption.NEW_BUILDER_METHOD)) {
-                final PsiMethod copyBuilderMethod = generateCopyBuilderMethod(topLevelClass, builderType,
+                PsiMethod copyBuilderMethod = generateCopyBuilderMethod(topLevelClass, builderType,
                         nonFinalFields, options);
                 addMethod(topLevelClass, null, copyBuilderMethod, true);
             } else {
-                final PsiMethod copyConstructorBuilderMethod = generateCopyConstructor(topLevelClass, builderType,
+                PsiMethod copyConstructorBuilderMethod = generateCopyConstructor(topLevelClass, builderType,
                         selectedFields, options);
                 addMethod(builderClass, null, copyConstructorBuilderMethod, true);
             }
@@ -103,29 +114,29 @@ public class InnerBuilderGenerator implements Runnable {
 
         // builder methods
         PsiElement lastAddedElement = null;
-        for (final PsiFieldMember member : nonFinalFields) {
-            final PsiMethod setterMethod = generateBuilderSetter(builderType, member, options);
+        for (PsiFieldMember member : nonFinalFields) {
+            PsiMethod setterMethod = generateBuilderSetter(builderType, member, options);
             lastAddedElement = addMethod(builderClass, lastAddedElement, setterMethod, false);
         }
 
         // builder.build() method
-        final PsiMethod buildMethod = generateBuildMethod(topLevelClass, options);
+        PsiMethod buildMethod = generateBuildMethod(topLevelClass, options);
         addMethod(builderClass, lastAddedElement, buildMethod, false);
 
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(file);
         CodeStyleManager.getInstance(project).reformat(builderClass);
     }
 
-    private PsiMethod generateCopyBuilderMethod(final PsiClass topLevelClass, final PsiType builderType,
-                                                final Collection<PsiFieldMember> fields,
-                                                final Set<InnerBuilderOption> options) {
-        final PsiMethod copyBuilderMethod = psiElementFactory.createMethod("newBuilder", builderType);
+    private PsiMethod generateCopyBuilderMethod(PsiClass topLevelClass, PsiType builderType,
+                                                Collection<PsiFieldMember> fields,
+                                                Set<InnerBuilderOption> options) {
+        PsiMethod copyBuilderMethod = psiElementFactory.createMethod("newBuilder", builderType);
         PsiUtil.setModifierProperty(copyBuilderMethod, PsiModifier.STATIC, true);
         PsiUtil.setModifierProperty(copyBuilderMethod, PsiModifier.PUBLIC, true);
 
-        final PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
-        final PsiParameter parameter = psiElementFactory.createParameter("copy", topLevelClassType);
-        final PsiModifierList parameterModifierList = parameter.getModifierList();
+        PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
+        PsiParameter parameter = psiElementFactory.createParameter("copy", topLevelClassType);
+        PsiModifierList parameterModifierList = parameter.getModifierList();
 
         if (parameterModifierList != null) {
             if (options.contains(InnerBuilderOption.JSR305_ANNOTATIONS)) {
@@ -136,10 +147,10 @@ public class InnerBuilderGenerator implements Runnable {
             }
         }
         copyBuilderMethod.getParameterList().add(parameter);
-        final PsiCodeBlock copyBuilderBody = copyBuilderMethod.getBody();
+        PsiCodeBlock copyBuilderBody = copyBuilderMethod.getBody();
         if (copyBuilderBody != null) {
-            final StringBuilder copyBuilderParameters = new StringBuilder();
-            for (final PsiFieldMember fieldMember : selectedFields) {
+            StringBuilder copyBuilderParameters = new StringBuilder();
+            for (PsiFieldMember fieldMember : selectedFields) {
                 if (fieldMember.getElement().hasModifierProperty(PsiModifier.FINAL)
                         && !options.contains(InnerBuilderOption.FINAL_SETTERS)) {
 
@@ -151,18 +162,18 @@ public class InnerBuilderGenerator implements Runnable {
                 }
             }
             if (options.contains(InnerBuilderOption.NEW_BUILDER_METHOD)) {
-                final PsiStatement newBuilderStatement = psiElementFactory.createStatementFromText(String.format(
-                                "%s builder = new %s(%s);", builderType.getPresentableText(),
-                                builderType.getPresentableText(), copyBuilderParameters.toString()),
+                PsiStatement newBuilderStatement = psiElementFactory.createStatementFromText(String.format(
+                        "%s builder = new %s(%s);", builderType.getPresentableText(),
+                        builderType.getPresentableText(), copyBuilderParameters.toString()),
                         copyBuilderMethod);
                 copyBuilderBody.add(newBuilderStatement);
 
                 addCopyBody(fields, copyBuilderMethod, "builder.");
                 copyBuilderBody.add(psiElementFactory.createStatementFromText("return builder;", copyBuilderMethod));
             } else {
-                final PsiStatement newBuilderStatement = psiElementFactory.createStatementFromText(String.format(
-                                "return new %s(%s);", builderType.getPresentableText(),
-                                copyBuilderParameters.toString()),
+                PsiStatement newBuilderStatement = psiElementFactory.createStatementFromText(String.format(
+                        "return new %s(%s);", builderType.getPresentableText(),
+                        copyBuilderParameters.toString()),
                         copyBuilderMethod);
                 copyBuilderBody.add(newBuilderStatement);
             }
@@ -170,16 +181,16 @@ public class InnerBuilderGenerator implements Runnable {
         return copyBuilderMethod;
     }
 
-    private PsiMethod generateCopyConstructor(final PsiClass topLevelClass, final PsiType builderType,
-                                              final Collection<PsiFieldMember> nonFinalFields,
-                                              final Set<InnerBuilderOption> options) {
+    private PsiMethod generateCopyConstructor(PsiClass topLevelClass, PsiType builderType,
+                                              Collection<PsiFieldMember> nonFinalFields,
+                                              Set<InnerBuilderOption> options) {
 
-        final PsiMethod copyConstructor = psiElementFactory.createConstructor(builderType.getPresentableText());
+        PsiMethod copyConstructor = psiElementFactory.createConstructor(builderType.getPresentableText());
         PsiUtil.setModifierProperty(copyConstructor, PsiModifier.PUBLIC, true);
 
-        final PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
-        final PsiParameter constructorParameter = psiElementFactory.createParameter("copy", topLevelClassType);
-        final PsiModifierList parameterModifierList = constructorParameter.getModifierList();
+        PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
+        PsiParameter constructorParameter = psiElementFactory.createParameter("copy", topLevelClassType);
+        PsiModifierList parameterModifierList = constructorParameter.getModifierList();
 
         if (parameterModifierList != null) {
             if (options.contains(InnerBuilderOption.JSR305_ANNOTATIONS))
@@ -192,40 +203,40 @@ public class InnerBuilderGenerator implements Runnable {
         return copyConstructor;
     }
 
-    private void addCopyBody(final Collection<PsiFieldMember> fields, final PsiMethod method, final String qName) {
-        final PsiCodeBlock methodBody = method.getBody();
+    private void addCopyBody(Collection<PsiFieldMember> fields, PsiMethod method, String qName) {
+        PsiCodeBlock methodBody = method.getBody();
         if (methodBody == null) {
             return;
         }
-        for (final PsiFieldMember member : fields) {
-            final PsiField field = member.getElement();
-            final PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
+        for (PsiFieldMember member : fields) {
+            PsiField field = member.getElement();
+            PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
                     "%s%2$s = copy.%2$s;", qName, field.getName()), method);
             methodBody.add(assignStatement);
         }
     }
 
-    private PsiMethod generateBuilderConstructor(final PsiClass builderClass,
-                                                 final Collection<PsiFieldMember> finalFields,
-                                                 final Set<InnerBuilderOption> options) {
+    private PsiMethod generateBuilderConstructor(PsiClass builderClass,
+                                                 Collection<PsiFieldMember> finalFields,
+                                                 Set<InnerBuilderOption> options) {
 
-        final PsiMethod builderConstructor = psiElementFactory.createConstructor(builderClass.getName());
+        PsiMethod builderConstructor = psiElementFactory.createConstructor(builderClass.getName());
         if (options.contains(InnerBuilderOption.NEW_BUILDER_METHOD)) {
             PsiUtil.setModifierProperty(builderConstructor, PsiModifier.PRIVATE, true);
         } else {
             PsiUtil.setModifierProperty(builderConstructor, PsiModifier.PUBLIC, true);
         }
-        final PsiCodeBlock builderConstructorBody = builderConstructor.getBody();
+        PsiCodeBlock builderConstructorBody = builderConstructor.getBody();
         if (builderConstructorBody != null) {
-            for (final PsiFieldMember member : finalFields) {
-                final PsiField field = member.getElement();
-                final PsiType fieldType = field.getType();
-                final String fieldName = field.getName();
+            for (PsiFieldMember member : finalFields) {
+                PsiField field = member.getElement();
+                PsiType fieldType = field.getType();
+                String fieldName = field.getName();
 
-                final PsiParameter parameter = psiElementFactory.createParameter(fieldName, fieldType);
-                final PsiModifierList parameterModifierList = parameter.getModifierList();
-                final boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
-                final boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
+                PsiParameter parameter = psiElementFactory.createParameter(fieldName, fieldType);
+                PsiModifierList parameterModifierList = parameter.getModifierList();
+                boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
+                boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
 
                 if (!InnerBuilderUtils.isPrimitive(field) && parameterModifierList != null) {
                     if (useJsr305) parameterModifierList.addAnnotation(JSR305_NONNULL);
@@ -233,7 +244,7 @@ public class InnerBuilderGenerator implements Runnable {
                 }
 
                 builderConstructor.getParameterList().add(parameter);
-                final PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
+                PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
                         "this.%1$s = %1$s;", fieldName), builderConstructor);
                 builderConstructorBody.add(assignStatement);
             }
@@ -242,22 +253,21 @@ public class InnerBuilderGenerator implements Runnable {
         return builderConstructor;
     }
 
-
-    private PsiMethod generateNewBuilderMethod(final PsiType builderType, final Collection<PsiFieldMember> finalFields,
-                                               final Set<InnerBuilderOption> options) {
-        final PsiMethod newBuilderMethod = psiElementFactory.createMethod("newBuilder", builderType);
+    private PsiMethod generateNewBuilderMethod(PsiType builderType, Collection<PsiFieldMember> finalFields,
+                                               Set<InnerBuilderOption> options) {
+        PsiMethod newBuilderMethod = psiElementFactory.createMethod("newBuilder", builderType);
         PsiUtil.setModifierProperty(newBuilderMethod, PsiModifier.STATIC, true);
         PsiUtil.setModifierProperty(newBuilderMethod, PsiModifier.PUBLIC, true);
 
-        final StringBuilder fieldList = new StringBuilder();
+        StringBuilder fieldList = new StringBuilder();
         if (!finalFields.isEmpty()) {
-            for (final PsiFieldMember member : finalFields) {
-                final PsiField field = member.getElement();
-                final PsiType fieldType = field.getType();
-                final String fieldName = field.getName();
+            for (PsiFieldMember member : finalFields) {
+                PsiField field = member.getElement();
+                PsiType fieldType = field.getType();
+                String fieldName = field.getName();
 
-                final PsiParameter parameter = psiElementFactory.createParameter(fieldName, fieldType);
-                final PsiModifierList parameterModifierList = parameter.getModifierList();
+                PsiParameter parameter = psiElementFactory.createParameter(fieldName, fieldType);
+                PsiModifierList parameterModifierList = parameter.getModifierList();
                 if (parameterModifierList != null) {
 
                     if (!InnerBuilderUtils.isPrimitive(field)) {
@@ -274,59 +284,58 @@ public class InnerBuilderGenerator implements Runnable {
                 fieldList.append(fieldName);
             }
         }
-        final PsiCodeBlock newBuilderMethodBody = newBuilderMethod.getBody();
+        PsiCodeBlock newBuilderMethodBody = newBuilderMethod.getBody();
         if (newBuilderMethodBody != null) {
-            final PsiStatement newStatement = psiElementFactory.createStatementFromText(String.format(
-                            "return new %s(%s);", builderType.getPresentableText(), fieldList.toString()),
+            PsiStatement newStatement = psiElementFactory.createStatementFromText(String.format(
+                    "return new %s(%s);", builderType.getPresentableText(), fieldList.toString()),
                     newBuilderMethod);
             newBuilderMethodBody.add(newStatement);
         }
         return newBuilderMethod;
     }
 
-    private PsiMethod generateBuilderSetter(final PsiType builderType, final PsiFieldMember member,
-                                            final Set<InnerBuilderOption> options) {
+    private PsiMethod generateBuilderSetter(PsiType builderType, PsiFieldMember member, Set<InnerBuilderOption> options) {
 
-        final PsiField field = member.getElement();
-        final PsiType fieldType = field.getType();
-        final String fieldName = field.getName();
+        PsiField field = member.getElement();
+        PsiType fieldType = field.getType();
+        String fieldName = field.getName();
 
-        final String methodName;
+        String methodName;
         if (options.contains(InnerBuilderOption.WITH_NOTATION)) {
             methodName = String.format("with%s", InnerBuilderUtils.capitalize(fieldName));
         } else {
             methodName = fieldName;
         }
 
-        final String parameterName = options.contains(InnerBuilderOption.FIELD_NAMES) ? 
-		fieldName :
-		!BUILDER_SETTER_DEFAULT_PARAMETER_NAME.equals(fieldName) ?
-                BUILDER_SETTER_DEFAULT_PARAMETER_NAME :
-                BUILDER_SETTER_ALTERNATIVE_PARAMETER_NAME;
-        final PsiMethod setterMethod = psiElementFactory.createMethod(methodName, builderType);
-        final boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
-        final boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
+        String parameterName = options.contains(InnerBuilderOption.FIELD_NAMES) ?
+                fieldName :
+                !BUILDER_SETTER_DEFAULT_PARAMETER_NAME.equals(fieldName) ?
+                        BUILDER_SETTER_DEFAULT_PARAMETER_NAME :
+                        BUILDER_SETTER_ALTERNATIVE_PARAMETER_NAME;
+        PsiMethod setterMethod = psiElementFactory.createMethod(methodName, builderType);
+        boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
+        boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
 
         if (useJsr305) setterMethod.getModifierList().addAnnotation(JSR305_NONNULL);
         if (useFindbugs) setterMethod.getModifierList().addAnnotation(FINDBUGS_NONNULL);
 
         setterMethod.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
-        final PsiParameter setterParameter = psiElementFactory.createParameter(parameterName, fieldType);
+        PsiParameter setterParameter = psiElementFactory.createParameter(parameterName, fieldType);
 
         if (!(fieldType instanceof PsiPrimitiveType)) {
-            final PsiModifierList setterParameterModifierList = setterParameter.getModifierList();
+            PsiModifierList setterParameterModifierList = setterParameter.getModifierList();
             if (setterParameterModifierList != null) {
                 if (useJsr305) setterParameterModifierList.addAnnotation(JSR305_NONNULL);
                 if (useFindbugs) setterParameterModifierList.addAnnotation(FINDBUGS_NONNULL);
             }
         }
         setterMethod.getParameterList().add(setterParameter);
-        final PsiCodeBlock setterMethodBody = setterMethod.getBody();
+        PsiCodeBlock setterMethodBody = setterMethod.getBody();
         if (setterMethodBody != null) {
-	    final String actualFieldName =  options.contains(InnerBuilderOption.FIELD_NAMES) ?
-		    "this." + fieldName :
-		    fieldName;
-            final PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
+            String actualFieldName = options.contains(InnerBuilderOption.FIELD_NAMES) ?
+                    "this." + fieldName :
+                    fieldName;
+            PsiStatement assignStatement = psiElementFactory.createStatementFromText(String.format(
                     "%s = %s;", actualFieldName, parameterName), setterMethod);
             setterMethodBody.add(assignStatement);
             setterMethodBody.add(InnerBuilderUtils.createReturnThis(psiElementFactory, setterMethod));
@@ -335,37 +344,36 @@ public class InnerBuilderGenerator implements Runnable {
         return setterMethod;
     }
 
-
-    private PsiMethod generateConstructor(final PsiClass topLevelClass, final PsiType builderType) {
-        final PsiMethod constructor = psiElementFactory.createConstructor(topLevelClass.getName());
+    private PsiMethod generateConstructor(PsiClass topLevelClass, PsiType builderType) {
+        PsiMethod constructor = psiElementFactory.createConstructor(topLevelClass.getName());
         constructor.getModifierList().setModifierProperty(PsiModifier.PRIVATE, true);
 
-        final PsiParameter builderParameter = psiElementFactory.createParameter("builder", builderType);
+        PsiParameter builderParameter = psiElementFactory.createParameter("builder", builderType);
         constructor.getParameterList().add(builderParameter);
 
-        final PsiCodeBlock constructorBody = constructor.getBody();
+        PsiCodeBlock constructorBody = constructor.getBody();
         if (constructorBody != null) {
-            for (final PsiFieldMember member : selectedFields) {
-                final PsiField field = member.getElement();
+            for (PsiFieldMember member : selectedFields) {
+                PsiField field = member.getElement();
 
-                final PsiMethod setterPrototype = PropertyUtil.generateSetterPrototype(field);
-                final PsiMethod setter = topLevelClass.findMethodBySignature(setterPrototype, true);
+                PsiMethod setterPrototype = PropertyUtil.generateSetterPrototype(field);
+                PsiMethod setter = topLevelClass.findMethodBySignature(setterPrototype, true);
 
-                final String fieldName = field.getName();
+                String fieldName = field.getName();
                 boolean isFinal = false;
-                final PsiModifierList modifierList = field.getModifierList();
+                PsiModifierList modifierList = field.getModifierList();
                 if (modifierList != null) {
                     isFinal = modifierList.hasModifierProperty(PsiModifier.FINAL);
                 }
 
-                final String assignText;
+                String assignText;
                 if (setter == null || isFinal) {
                     assignText = String.format("%1$s = builder.%1$s;", fieldName);
                 } else {
                     assignText = String.format("%s(builder.%s);", setter.getName(), fieldName);
                 }
 
-                final PsiStatement assignStatement = psiElementFactory.createStatementFromText(assignText, null);
+                PsiStatement assignStatement = psiElementFactory.createStatementFromText(assignText, null);
                 constructorBody.add(assignStatement);
             }
         }
@@ -373,12 +381,12 @@ public class InnerBuilderGenerator implements Runnable {
         return constructor;
     }
 
-    private PsiMethod generateBuildMethod(final PsiClass topLevelClass, final Set<InnerBuilderOption> options) {
-        final PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
-        final PsiMethod buildMethod = psiElementFactory.createMethod("build", topLevelClassType);
+    private PsiMethod generateBuildMethod(PsiClass topLevelClass, Set<InnerBuilderOption> options) {
+        PsiType topLevelClassType = psiElementFactory.createType(topLevelClass);
+        PsiMethod buildMethod = psiElementFactory.createMethod("build", topLevelClassType);
 
-        final boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
-        final boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
+        boolean useJsr305 = options.contains(InnerBuilderOption.JSR305_ANNOTATIONS);
+        boolean useFindbugs = options.contains(InnerBuilderOption.FINDBUGS_ANNOTATION);
         if (useJsr305)
             buildMethod.getModifierList().addAnnotation(JSR305_NONNULL);
         if (useFindbugs)
@@ -386,9 +394,9 @@ public class InnerBuilderGenerator implements Runnable {
 
         buildMethod.getModifierList().setModifierProperty(PsiModifier.PUBLIC, true);
 
-        final PsiCodeBlock buildMethodBody = buildMethod.getBody();
+        PsiCodeBlock buildMethodBody = buildMethod.getBody();
         if (buildMethodBody != null) {
-            final PsiStatement returnStatement = psiElementFactory.createStatementFromText(String.format(
+            PsiStatement returnStatement = psiElementFactory.createStatementFromText(String.format(
                     "return new %s(this);", topLevelClass.getName()), buildMethod);
             buildMethodBody.add(returnStatement);
         }
@@ -397,8 +405,8 @@ public class InnerBuilderGenerator implements Runnable {
     }
 
     @NotNull
-    private PsiClass findOrCreateBuilderClass(final PsiClass topLevelClass) {
-        final PsiClass builderClass = topLevelClass.findInnerClassByName(BUILDER_CLASS_NAME, false);
+    private PsiClass findOrCreateBuilderClass(PsiClass topLevelClass) {
+        PsiClass builderClass = topLevelClass.findInnerClassByName(BUILDER_CLASS_NAME, false);
         if (builderClass == null) {
             return createBuilderClass(topLevelClass);
         }
@@ -407,25 +415,25 @@ public class InnerBuilderGenerator implements Runnable {
     }
 
     @NotNull
-    private PsiClass createBuilderClass(final PsiClass topLevelClass) {
-        final PsiClass builderClass = (PsiClass) topLevelClass.add(psiElementFactory.createClass(BUILDER_CLASS_NAME));
+    private PsiClass createBuilderClass(PsiClass topLevelClass) {
+        PsiClass builderClass = (PsiClass) topLevelClass.add(psiElementFactory.createClass(BUILDER_CLASS_NAME));
         PsiUtil.setModifierProperty(builderClass, PsiModifier.STATIC, true);
         PsiUtil.setModifierProperty(builderClass, PsiModifier.FINAL, true);
         setBuilderComment(builderClass, topLevelClass);
         return builderClass;
     }
 
-    private PsiElement findOrCreateField(final PsiClass builderClass, final PsiFieldMember member,
-                                         @Nullable final PsiElement last) {
-        final PsiField field = member.getElement();
-        final String fieldName = field.getName();
-        final PsiType fieldType = field.getType();
-        final PsiField existingField = builderClass.findFieldByName(fieldName, false);
+    private PsiElement findOrCreateField(PsiClass builderClass, PsiFieldMember member,
+                                         @Nullable PsiElement last) {
+        PsiField field = member.getElement();
+        String fieldName = field.getName();
+        PsiType fieldType = field.getType();
+        PsiField existingField = builderClass.findFieldByName(fieldName, false);
         if (existingField == null || !areTypesPresentableEqual(existingField.getType(), fieldType)) {
             if (existingField != null) {
                 existingField.delete();
             }
-            final PsiField newField = psiElementFactory.createField(fieldName, fieldType);
+            PsiField newField = psiElementFactory.createField(fieldName, fieldType);
             if (last != null) {
                 return builderClass.addAfter(newField, last);
             } else {
@@ -435,11 +443,11 @@ public class InnerBuilderGenerator implements Runnable {
         return existingField;
     }
 
-    private PsiElement addMethod(@NotNull final PsiClass target, @Nullable final PsiElement after,
-                                 @NotNull final PsiMethod newMethod, final boolean replace) {
+    private PsiElement addMethod(@NotNull PsiClass target, @Nullable PsiElement after,
+                                 @NotNull PsiMethod newMethod, boolean replace) {
         PsiMethod existingMethod = target.findMethodBySignature(newMethod, false);
         if (existingMethod == null && newMethod.isConstructor()) {
-            for (final PsiMethod constructor : target.getConstructors()) {
+            for (PsiMethod constructor : target.getConstructors()) {
                 if (InnerBuilderUtils.areParameterListsEqual(constructor.getParameterList(),
                         newMethod.getParameterList())) {
                     existingMethod = constructor;
@@ -459,19 +467,7 @@ public class InnerBuilderGenerator implements Runnable {
         return existingMethod;
     }
 
-    private static EnumSet<InnerBuilderOption> currentOptions() {
-        final EnumSet<InnerBuilderOption> options = EnumSet.noneOf(InnerBuilderOption.class);
-        final PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
-        for (final InnerBuilderOption option : InnerBuilderOption.values()) {
-            final boolean currentSetting = propertiesComponent.getBoolean(option.getProperty(), false);
-            if (currentSetting) {
-                options.add(option);
-            }
-        }
-        return options;
-    }
-
-    private void setBuilderComment(final PsiClass clazz, final PsiClass topLevelClass) {
+    private void setBuilderComment(PsiClass clazz, PsiClass topLevelClass) {
         if (currentOptions().contains(InnerBuilderOption.WITH_JAVADOC)) {
             StringBuilder str = new StringBuilder("/**\n").append("* {@code ");
             str.append(topLevelClass.getName()).append("} builder static inner class.\n");
@@ -480,7 +476,7 @@ public class InnerBuilderGenerator implements Runnable {
         }
     }
 
-    private void setSetterComment(final PsiMethod method, final String fieldName, final String parameterName) {
+    private void setSetterComment(PsiMethod method, String fieldName, String parameterName) {
         if (currentOptions().contains(InnerBuilderOption.WITH_JAVADOC)) {
             StringBuilder str = new StringBuilder("/**\n").append("* Sets the {@code ").append(fieldName);
             str.append("} and returns a reference to this Builder so that the methods can be chained together.\n");
@@ -491,7 +487,7 @@ public class InnerBuilderGenerator implements Runnable {
         }
     }
 
-    private void setBuildMethodComment(final PsiMethod method, final PsiClass topLevelClass) {
+    private void setBuildMethodComment(PsiMethod method, PsiClass topLevelClass) {
         if (currentOptions().contains(InnerBuilderOption.WITH_JAVADOC)) {
             StringBuilder str = new StringBuilder("/**\n");
             str.append("* Returns a {@code ").append(topLevelClass.getName()).append("} built ");
@@ -502,7 +498,7 @@ public class InnerBuilderGenerator implements Runnable {
         }
     }
 
-    private void setStringComment(final PsiMethod method, final String strComment) {
+    private void setStringComment(PsiMethod method, String strComment) {
         PsiComment comment = psiElementFactory.createCommentFromText(strComment, null);
         PsiDocComment doc = method.getDocComment();
         if (doc != null) {
@@ -512,7 +508,7 @@ public class InnerBuilderGenerator implements Runnable {
         }
     }
 
-    private void setStringComment(final PsiClass clazz, final String strComment) {
+    private void setStringComment(PsiClass clazz, String strComment) {
         PsiComment comment = psiElementFactory.createCommentFromText(strComment, null);
         PsiDocComment doc = clazz.getDocComment();
         if (doc != null) {

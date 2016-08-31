@@ -13,7 +13,7 @@ public enum InnerBuilderOption {
 
     private final String property;
 
-    private InnerBuilderOption(final String property) {
+    InnerBuilderOption(String property) {
         this.property = String.format("GenerateInnerBuilder.%s", property);
     }
 
