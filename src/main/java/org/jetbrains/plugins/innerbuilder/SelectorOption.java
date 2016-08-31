@@ -1,6 +1,7 @@
 package org.jetbrains.plugins.innerbuilder;
 
 public class SelectorOption {
+
     private final InnerBuilderOption option;
     private final String caption;
     private final char mnemonic;

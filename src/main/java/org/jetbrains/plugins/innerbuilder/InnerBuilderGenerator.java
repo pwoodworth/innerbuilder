@@ -1,21 +1,42 @@
 package org.jetbrains.plugins.innerbuilder;
 
+import com.google.common.collect.ImmutableMap;
 import com.intellij.codeInsight.generation.PsiFieldMember;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.psi.*;
+import com.intellij.psi.JavaPsiFacade;
+import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiCodeBlock;
+import com.intellij.psi.PsiComment;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiElementFactory;
+import com.intellij.psi.PsiField;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiModifier;
+import com.intellij.psi.PsiModifierList;
+import com.intellij.psi.PsiParameter;
+import com.intellij.psi.PsiPrimitiveType;
+import com.intellij.psi.PsiStatement;
+import com.intellij.psi.PsiType;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.util.PropertyUtil;
 import com.intellij.psi.util.PsiUtil;
+import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.jetbrains.plugins.innerbuilder.InnerBuilderUtils.areTypesPresentableEqual;
 
@@ -53,15 +74,31 @@ public class InnerBuilderGenerator implements Runnable {
     }
 
     private static EnumSet<InnerBuilderOption> currentOptions() {
-        EnumSet<InnerBuilderOption> options = EnumSet.noneOf(InnerBuilderOption.class);
+//        EnumSet<InnerBuilderOption> options = EnumSet.noneOf(InnerBuilderOption.class);
+        return EnumSet.copyOf(currentOptions2().keySet());
+    }
+
+    private static ImmutableMap<InnerBuilderOption, String> currentOptions2() {
+
+        ImmutableMap.Builder<InnerBuilderOption, String> builder = ImmutableMap.builder();
+
         PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
+
         for (InnerBuilderOption option : InnerBuilderOption.values()) {
-            boolean currentSetting = propertiesComponent.getBoolean(option.getProperty(), false);
-            if (currentSetting) {
-                options.add(option);
+
+            if (option.isTextfield()) {
+                String currentSetting = propertiesComponent.getValue(option.getProperty(), "");
+                if (StringUtils.isNotBlank(currentSetting)) {
+                    builder.put(option, currentSetting);
+                }
+            } else {
+                boolean currentSetting = propertiesComponent.getBoolean(option.getProperty(), false);
+                if (currentSetting) {
+                    builder.put(option, "true");
+                }
             }
         }
-        return options;
+        return builder.build();
     }
 
     @Override
@@ -70,7 +107,8 @@ public class InnerBuilderGenerator implements Runnable {
         if (topLevelClass == null) {
             return;
         }
-        Set<InnerBuilderOption> options = currentOptions();
+        ImmutableMap<InnerBuilderOption, String> fullOptions = currentOptions2();
+        Set<InnerBuilderOption> options = fullOptions.keySet();
         PsiClass builderClass = findOrCreateBuilderClass(topLevelClass);
         PsiType builderType = psiElementFactory.createTypeFromText(BUILDER_CLASS_NAME, null);
         PsiMethod constructor = generateConstructor(topLevelClass, builderType);
@@ -115,7 +153,7 @@ public class InnerBuilderGenerator implements Runnable {
         // builder methods
         PsiElement lastAddedElement = null;
         for (PsiFieldMember member : nonFinalFields) {
-            PsiMethod setterMethod = generateBuilderSetter(builderType, member, options);
+            PsiMethod setterMethod = generateBuilderSetter(builderType, member, fullOptions);
             lastAddedElement = addMethod(builderClass, lastAddedElement, setterMethod, false);
         }
 
@@ -294,15 +332,16 @@ public class InnerBuilderGenerator implements Runnable {
         return newBuilderMethod;
     }
 
-    private PsiMethod generateBuilderSetter(PsiType builderType, PsiFieldMember member, Set<InnerBuilderOption> options) {
+    private PsiMethod generateBuilderSetter(PsiType builderType, PsiFieldMember member, Map<InnerBuilderOption, String> fullOptions) {
 
+        Set<InnerBuilderOption> options = fullOptions.keySet();
         PsiField field = member.getElement();
         PsiType fieldType = field.getType();
         String fieldName = field.getName();
 
         String methodName;
         if (options.contains(InnerBuilderOption.WITH_NOTATION)) {
-            methodName = String.format("with%s", InnerBuilderUtils.capitalize(fieldName));
+            methodName = String.format("%s%s", fullOptions.get(InnerBuilderOption.WITH_NOTATION), InnerBuilderUtils.capitalize(fieldName));
         } else {
             methodName = fieldName;
         }

@@ -522,7 +522,6 @@
     <inspection_tool class="DjangoUrlArgumentsInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DontUsePairConstructor" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DottyDeprecatedWith" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="DoubleNegation" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DropTakeToSlice" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DuplicateCaseLabelJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DuplicateMnemonic" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -1301,7 +1300,7 @@
     <inspection_tool class="SpringFacetProgrammaticInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="SpringFactoryMethodInspection" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="SpringHandlersSchemasHighlighting" enabled="false" level="ERROR" enabled_by_default="false" />
-    <inspection_tool class="SpringInactiveProfileHighlightingInspection" enabled="false" level="INFORMATION" enabled_by_default="false" />
+    <inspection_tool class="SpringInactiveProfileHighlightingInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="SpringIncorrectResourceTypeInspection" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="SpringInjectionValueConsistencyInspection" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="SpringInjectionValueStyleInspection" enabled="false" level="WARNING" enabled_by_default="false" />

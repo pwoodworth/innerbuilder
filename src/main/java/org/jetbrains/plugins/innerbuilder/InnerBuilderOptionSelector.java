@@ -9,6 +9,9 @@ import com.intellij.ui.NonFocusableCheckBox;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.util.ArrayList;
@@ -90,8 +93,7 @@ public final class InnerBuilderOptionSelector {
     }
 
     @Nullable
-    public static List<PsiFieldMember> selectFieldsAndOptions(List<PsiFieldMember> members,
-                                                              Project project) {
+    public static List<PsiFieldMember> selectFieldsAndOptions(List<PsiFieldMember> members, Project project) {
         if (members == null || members.isEmpty()) {
             return null;
         }
@@ -100,7 +102,7 @@ public final class InnerBuilderOptionSelector {
             return members;
         }
 
-        JCheckBox[] optionCheckBoxes = buildOptionCheckBoxes();
+        JComponent[] optionCheckBoxes = buildOptionCheckBoxes();
 
         PsiFieldMember[] memberArray = members.toArray(new PsiFieldMember[members.size()]);
 
@@ -118,10 +120,10 @@ public final class InnerBuilderOptionSelector {
         return null;
     }
 
-    private static JCheckBox[] buildOptionCheckBoxes() {
+    private static JComponent[] buildOptionCheckBoxes() {
         PropertiesComponent propertiesComponent = PropertiesComponent.getInstance();
         int optionCount = OPTIONS.size();
-        JCheckBox[] checkBoxesArray = new JCheckBox[optionCount];
+        JComponent[] checkBoxesArray = new JComponent[optionCount];
         for (int i = 0; i < optionCount; i++) {
             checkBoxesArray[i] = buildOptionCheckBox(propertiesComponent, OPTIONS.get(i));
         }
@@ -129,23 +131,65 @@ public final class InnerBuilderOptionSelector {
         return checkBoxesArray;
     }
 
-    private static JCheckBox buildOptionCheckBox(PropertiesComponent propertiesComponent,
-                                                 SelectorOption selectorOption) {
+    private static JComponent buildOptionCheckBox(PropertiesComponent propertiesComponent, SelectorOption selectorOption) {
         InnerBuilderOption option = selectorOption.getOption();
+        if (option.isTextfield()) {
+            JLabel myLabel = new JLabel(selectorOption.getCaption());
+            JTextField optionCheckBox = new JTextField();
+//            selectorOption.getCaption()
+//            optionCheckBox.setMnemonic(selectorOption.getMnemonic());
+            optionCheckBox.setToolTipText(selectorOption.getToolTip());
 
-        JCheckBox optionCheckBox = new NonFocusableCheckBox(selectorOption.getCaption());
-        optionCheckBox.setMnemonic(selectorOption.getMnemonic());
-        optionCheckBox.setToolTipText(selectorOption.getToolTip());
+            String optionProperty = option.getProperty();
+            optionCheckBox.setText(propertiesComponent.getValue(optionProperty, ""));
+            optionCheckBox.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                    saveValue();
+                }
 
-        String optionProperty = option.getProperty();
-        optionCheckBox.setSelected(propertiesComponent.isTrueValue(optionProperty));
-        optionCheckBox.addItemListener(new ItemListener() {
-            @Override
-            public void itemStateChanged(ItemEvent event) {
-                propertiesComponent.setValue(optionProperty, Boolean.toString(optionCheckBox.isSelected()));
-            }
-        });
-        return optionCheckBox;
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                    saveValue();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                    saveValue();
+                }
+
+                private void saveValue() {
+                    String text = optionCheckBox.getText();
+                    System.out.println(String.format("Saving text '%s'", text));
+                    propertiesComponent.setValue(optionProperty, text);
+                }
+            });
+
+            JPanel panel = new JPanel(new BorderLayout());
+            panel.add(myLabel,BorderLayout.WEST);
+            panel.add(optionCheckBox,BorderLayout.CENTER);
+            myLabel.setLabelFor(optionCheckBox);
+
+
+            return panel;
+
+        } else {
+            JCheckBox optionCheckBox = new NonFocusableCheckBox(selectorOption.getCaption());
+            optionCheckBox.setMnemonic(selectorOption.getMnemonic());
+            optionCheckBox.setToolTipText(selectorOption.getToolTip());
+
+            String optionProperty = option.getProperty();
+            optionCheckBox.setSelected(propertiesComponent.isTrueValue(optionProperty));
+            optionCheckBox.addItemListener(new ItemListener() {
+                @Override
+                public void itemStateChanged(ItemEvent event) {
+                    propertiesComponent.setValue(optionProperty, Boolean.toString(optionCheckBox.isSelected()));
+                }
+            });
+            return optionCheckBox;
+
+        }
+
     }
 }
 
